@@ -16,6 +16,11 @@ class Config(object):
     MODE = 'train'  # Mode (train/eval)
     ROOT_DIR = None     # Root project directory
 
+    # Model configuration
+    N_HEAD = 3
+    N_ENCODING_LAYER = 1
+    N_DECODING_LAYER = 1
+    
     # --------------------
     # Training Parameters
     # Learning rate
