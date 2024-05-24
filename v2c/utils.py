@@ -163,7 +163,7 @@ def texts_to_sequences(texts,
     seqs = []
     for text in texts:
         seqs.append(text_to_sequence(text, vocab, filters, lower, split))
-    return np.array(seqs)
+    return seqs#np.array(seqs)
 
 def filter_tokens(tokens, 
                   specials=['<pad>', '<sos>', '<eos>']):
