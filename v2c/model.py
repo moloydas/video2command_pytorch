@@ -58,6 +58,33 @@ class CNNWrapper(nn.Module):
         return model
 
 # ----------------------------------------
+# Transformer Encoder and Decoder for V2CNet
+# ----------------------------------------
+class TransformerEncoder(nn.Module):
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward=2048, dropout=0.1):
+        super().__init__()
+        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout), num_layers)
+
+    def forward(self, src):
+        # Encode video features with Transformer
+        return self.transformer(src)
+
+
+class TransformerDecoder(nn.Module):
+    def __init__(self, d_model, nhead, num_layers, vocab_size, dim_feedforward=2048, dropout=0.1):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.transformer = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout), num_layers)
+        self.linear = nn.Linear(d_model, vocab_size)
+
+    def forward(self, tgt, memory, tgt_mask):
+        # Decode features and generate captions using Transformer
+        tgt = self.embedding(tgt)
+        output = self.transformer(tgt, memory, tgt_mask=tgt_mask)
+        output = self.linear(output)
+        return output
+
+# ----------------------------------------
 # Functions for V2CNet
 # ----------------------------------------
 
@@ -187,12 +214,17 @@ class Video2Command():
     def build(self,
               bias_vector=None):
         # Initialize Encode & Decode models here
-        self.video_encoder = VideoEncoder(in_size=list(self.config.BACKBONE.values())[0],
-                                          units=self.config.UNITS)
-        self.command_decoder = CommandDecoder(units=self.config.UNITS,
-                                              vocab_size=self.config.VOCAB_SIZE,
-                                              embed_dim=self.config.EMBED_SIZE,
-                                              bias_vector=bias_vector)
+        # self.video_encoder = VideoEncoder(in_size=list(self.config.BACKBONE.values())[0],
+        #                                   units=self.config.UNITS)
+        # self.command_decoder = CommandDecoder(units=self.config.UNITS,
+        #                                       vocab_size=self.config.VOCAB_SIZE,
+        #                                       embed_dim=self.config.EMBED_SIZE,
+        #                                       bias_vector=bias_vector)
+
+
+        self.video_encoder = TransformerEncoder(d_model, nhead, num_encoder_layers)
+        self.command_decoder = TransformerDecoder(d_model, nhead, num_decoder_layers, vocab_size=self.config.VOCAB_SIZE, dim_feedforward, dropout)
+
         self.video_encoder.to(self.device)
         self.command_decoder.to(self.device)
     
