@@ -17,7 +17,7 @@ class Config(object):
     ROOT_DIR = None     # Root project directory
 
     # Model configuration
-    N_HEAD = 3
+    N_HEAD = 8
     N_ENCODING_LAYER = 1
     N_DECODING_LAYER = 1
     
