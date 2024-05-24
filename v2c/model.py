@@ -221,9 +221,8 @@ class Video2Command():
         #                                       embed_dim=self.config.EMBED_SIZE,
         #                                       bias_vector=bias_vector)
 
-
-        self.video_encoder = TransformerEncoder(d_model, nhead, num_encoder_layers)
-        self.command_decoder = TransformerDecoder(d_model, nhead, num_decoder_layers, vocab_size=self.config.VOCAB_SIZE, dim_feedforward, dropout)
+        self.video_encoder = TransformerEncoder(list(self.config.BACKBONE.values())[0], self.config.N_HEAD, self.config.N_ENCODING_LAYER)
+        self.command_decoder = TransformerDecoder(self.config.UNITS, self.config.N_HEAD, self.config.N_DECODING_LAYER, vocab_size=self.config.VOCAB_SIZE)
 
         self.video_encoder.to(self.device)
         self.command_decoder.to(self.device)
