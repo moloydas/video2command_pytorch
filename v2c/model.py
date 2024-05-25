@@ -1,8 +1,9 @@
 import os
-
+import math
 import numpy as np
 import torch
 import torch.nn as nn
+from torch import Tensor
 import torch.nn.functional as F
 from torchvision import models
 from v2c.backbone import resnet
@@ -60,134 +61,88 @@ class CNNWrapper(nn.Module):
 # ----------------------------------------
 # Transformer Encoder and Decoder for V2CNet
 # ----------------------------------------
-class TransformerEncoder(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward=2048, dropout=0.1):
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 10):
         super().__init__()
-        self.transformer = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout), num_layers)
+        self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, src):
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Arguments:
+            x: Tensor, shape ``[batch_size, seq_len, embedding_dim]``
+        """
+        x = x + self.pe[:x.size(1)]
+        return self.dropout(x)
+
+class TransformerEncoder(nn.Module):
+    def __init__(self, config, dim_feedforward=2048, dropout=0.1):
+        super().__init__()
+        self.positional_encoder = PositionalEncoding(d_model=config.N_FEATURES, 
+                                                     dropout=dropout, 
+                                                     max_len=config.WINDOW_SIZE)
+        self.encoder = nn.TransformerEncoder(
+                                nn.TransformerEncoderLayer( config.N_FEATURES, 
+                                                            config.N_HEAD, 
+                                                            dim_feedforward=dim_feedforward, 
+                                                            dropout=dropout,
+                                                            batch_first=True), config.N_ENCODING_LAYER)
+
+        self.linear = nn.Linear(config.N_FEATURES, config.EMBED_SIZE)
+
+    def forward(self, x):
         # Encode video features with Transformer
-        return self.transformer(src)
-
+        x = self.positional_encoder(x)
+        x = self.encoder(x)
+        return self.linear(x)
 
 class TransformerDecoder(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, vocab_size, dim_feedforward=2048, dropout=0.1):
+    def __init__(self, config, dim_feedforward=2048, dropout=0.1):
         super().__init__()
-        self.embedding = nn.Embedding(vocab_size, d_model)
-        self.transformer = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout), num_layers)
-        self.linear = nn.Linear(d_model, vocab_size)
+        self.embedding = nn.Embedding(config.VOCAB_SIZE, config.EMBED_SIZE)
+        self.position_embedding = PositionalEncoding(d_model=config.EMBED_SIZE,
+                                                        dropout=dropout,
+                                                        max_len=config.MAXLEN)
+        self.decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(config.EMBED_SIZE, 
+                                                                            config.N_HEAD, 
+                                                                            dim_feedforward, 
+                                                                            dropout,
+                                                                            batch_first=True), config.N_DECODING_LAYER)
 
-    def forward(self, tgt, memory, tgt_mask):
+    def forward(self, target, enc_out, target_mask):
         # Decode features and generate captions using Transformer
-        tgt = self.embedding(tgt)
-        output = self.transformer(tgt, memory, tgt_mask=tgt_mask)
+        x = self.embedding(target)
+        x = self.position_embedding(x)
+        output = self.decoder(x, enc_out, tgt_mask=target_mask)
+        return output
+
+class TransformerV2C(nn.Module):
+    def __init__(self, config, d_hid: int = 2048, dropout: float = 0.5):
+        super().__init__()
+        
+        self.encoder = TransformerEncoder(config, d_hid, dropout)
+        self.decoder = TransformerDecoder(config, d_hid, dropout)
+        self.linear = nn.Linear(config.EMBED_SIZE, config.VOCAB_SIZE)
+        self.softmax = nn.LogSoftmax(dim=-1)
+  
+    def forward(self, v_feat, tgt, tgt_mask):
+        enc_out = self.encoder(v_feat)
+        output = self.decoder(tgt, enc_out, tgt_mask)
         output = self.linear(output)
+        output = self.softmax(output)
         return output
 
 # ----------------------------------------
 # Functions for V2CNet
 # ----------------------------------------
-
-class VideoEncoder(nn.Module):
-    """Module to encode pre-extracted features coming from 
-    pre-trained CNN.
-    """
-    def __init__(self,
-                 in_size,
-                 units):
-        super(VideoEncoder, self).__init__()
-        self.linear = nn.Linear(in_size, units)
-        self.lstm = nn.LSTM(units, units, batch_first=True)
-        self.reset_parameters()
-
-    def forward(self, 
-                Xv):
-        # Phase 1: Encoding Stage
-        # Encode video features with one dense layer and lstm
-        # State of this lstm to be used for lstm2 language generator
-        Xv = self.linear(Xv)
-        #print('linear:', Xv.shape)
-        Xv = F.relu(Xv)
-
-        Xv, (hi, ci) = self.lstm(Xv)
-        Xv = Xv[:,-1,:]     # Only need the last timestep
-        hi, ci = hi[0,:,:], ci[0,:,:]
-        #print('lstm:', Xv.shape, 'hi:', hi.shape, 'ci:', ci.shape)
-        return Xv, (hi, ci)
-
-    def reset_parameters(self):
-        for n, p in self.named_parameters():
-            if 'weight' in n:
-                if 'hh' in n:
-                    nn.init.orthogonal_(p.data)
-                else:
-                    nn.init.xavier_uniform_(p.data)
-            else:
-                nn.init.zeros_(p.data)
-
-
-class CommandDecoder(nn.Module):
-    """Module to decode features and generate word for captions
-    using RNN.
-    """
-    def __init__(self,
-                 units,
-                 vocab_size,
-                 embed_dim,
-                 bias_vector=None):
-        super(CommandDecoder, self).__init__()
-        self.units = units
-        self.embed_dim = embed_dim
-
-        self.embed = nn.Embedding(vocab_size, embed_dim)
-        self.lstm_cell = nn.LSTMCell(embed_dim, units)
-        self.logits = nn.Linear(units, vocab_size, bias=True)
-        self.softmax = nn.LogSoftmax(dim=1)
-        self.reset_parameters(bias_vector)
-
-    def forward(self, 
-                Xs, 
-                states):
-        # Phase 2: Decoding Stage
-        # Given the previous word token, generate next caption word using lstm2
-        # Sequence processing and generating
-        #print('sentence decoding stage:')
-        #print('Xs:', Xs.shape)
-        Xs = self.embed(Xs)
-        #print('embed:', Xs.shape)
-
-        hi, ci = self.lstm_cell(Xs, states)
-        #print('out:', hi.shape, 'hi:', states[0].shape, 'ci:', states[1].shape)
-
-        x = self.logits(hi)
-        #print('logits:', x.shape)
-        x = self.softmax(x)
-        #print('softmax:', x.shape)
-        return x, (hi, ci)
-
-    def init_hidden(self, 
-                    batch_size):
-        """Initialize a zero state for LSTM.
-        """
-        h0 = torch.zeros(batch_size, self.units)
-        c0 = torch.zeros(batch_size, self.units)
-        return (h0, c0)
-
-    def reset_parameters(self,
-                         bias_vector):
-        for n, p in self.named_parameters():
-            if 'weight' in n:
-                if 'hh' in n:
-                    nn.init.orthogonal_(p.data)
-                else:
-                    nn.init.xavier_uniform_(p.data)
-            else:
-                nn.init.zeros_(p.data)
-        nn.init.uniform_(self.embed.weight.data, -0.05, 0.05)
-        if bias_vector is not None:
-            self.logits.bias.data = torch.from_numpy(bias_vector).float()
-
-
 class CommandLoss(nn.Module):
     """Calculate Cross-entropy loss per word.
     """
@@ -214,26 +169,17 @@ class Video2Command():
     def build(self,
               bias_vector=None):
         # Initialize Encode & Decode models here
-        # self.video_encoder = VideoEncoder(in_size=list(self.config.BACKBONE.values())[0],
-        #                                   units=self.config.UNITS)
-        # self.command_decoder = CommandDecoder(units=self.config.UNITS,
-        #                                       vocab_size=self.config.VOCAB_SIZE,
-        #                                       embed_dim=self.config.EMBED_SIZE,
-        #                                       bias_vector=bias_vector)
-
-        self.video_encoder = TransformerEncoder(list(self.config.BACKBONE.values())[0], self.config.N_HEAD, self.config.N_ENCODING_LAYER)
-        self.command_decoder = TransformerDecoder(self.config.UNITS, self.config.N_HEAD, self.config.N_DECODING_LAYER, vocab_size=self.config.VOCAB_SIZE)
-
-        self.video_encoder.to(self.device)
-        self.command_decoder.to(self.device)
+        self.transformerV2C = TransformerV2C(self.config, d_hid=2048, dropout=0.5)
+        self.transformerV2C.to(self.device)
     
         # Loss function
         self.loss_objective = CommandLoss()
         self.loss_objective.to(self.device)
 
         # Setup parameters and optimizer
-        self.params = list(self.video_encoder.parameters()) + \
-                      list(self.command_decoder.parameters())
+        # self.params = list(self.video_encoder.parameters()) + \
+        #               list(self.command_decoder.parameters())
+        self.params = list(self.transformerV2C.parameters())
         self.optimizer = torch.optim.Adam(self.params, 
                                           lr=self.config.LEARNING_RATE)
 
@@ -253,19 +199,39 @@ class Video2Command():
             # Zero the parameter gradients
             self.optimizer.zero_grad()
 
-            # Forward pass
-            # Video feature extraction 1st
-            Xv, states = self.video_encoder(Xv)
-
-            # Calculate mask against zero-padding
+            # Get target_mask for Transformer
             S_mask = S != 0
+            tgt_mask = S_mask.unsqueeze(1).unsqueeze(3)
+            nopeak_mask = (1 - torch.triu(torch.ones(self.config.N_HEAD, self.config.MAXLEN, self.config.MAXLEN), diagonal=1)).bool()
+            tgt_mask = tgt_mask & nopeak_mask
+            tgt_mask = tgt_mask.view(-1, self.config.MAXLEN, self.config.MAXLEN)
+            tgt_mask = tgt_mask.to(self.device)
 
-            # Teacher-Forcing for command decoder
-            for timestep in range(self.config.MAXLEN - 1):
-                Xs = S[:,timestep]
-                probs, states = self.command_decoder(Xs, states)
-                # Calculate loss per word
-                loss += self.loss_objective(probs, S[:,timestep+1])
+            # Get captions with Transformer
+            probs = self.transformerV2C(Xv, S, tgt_mask=tgt_mask)
+
+            # Xv = self.video_encoder(Xv)
+            # print(S)
+            # # Xv, states = self.video_encoder(Xv)
+
+            # # Calculate mask against zero-padding
+            # S_mask = S != 0
+
+            # # Teacher forcing for caption decoder (replace this if needed)
+            # for timestep in range(self.config.MAXLEN - 1):
+            #     # Xs = S[:, timestep]
+            #     # probs, states = self.command_decoder(Xs, Xv, tgt_mask=S_mask[:, :timestep+1])  # Use previous captions for mask
+
+            #     Xs = S[:, timestep]
+            #     # Modify causal mask to include current timestep
+            #     attn_mask = torch.triu(torch.ones((Xs.shape[0], Xs.shape[0]), dtype=torch.bool)).to(self.device)
+            #     attn_mask[:, :timestep+1] = 1  # Include current timestep for teacher forcing
+            #     probs, states = self.command_decoder(Xs, Xv, tgt_mask=attn_mask)
+
+            #     # Calculate loss per word
+            #     loss += self.loss_objective(probs, S[:, timestep+1])
+            loss = self.loss_objective(probs[:,:-1,:].reshape(-1, probs.shape[-1]), S[:, 1:].reshape(-1))
+
             loss = loss / S_mask.sum()     # Loss per word
 
             # Gradient backward
@@ -274,13 +240,15 @@ class Video2Command():
             return loss
 
         # Training epochs
-        self.video_encoder.train()
-        self.command_decoder.train()
+        # self.video_encoder.train()
+        # self.command_decoder.train()
+        self.transformerV2C.train()
         for epoch in range(self.config.NUM_EPOCHS):
             total_loss = 0.0
             for i, (Xv, S, clip_names) in enumerate(train_loader):
                 # Mini-batch
                 Xv, S = Xv.to(self.device), S.to(self.device)
+
                 # Train step
                 loss = train_step(Xv, S)
                 total_loss += loss

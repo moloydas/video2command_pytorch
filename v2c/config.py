@@ -44,7 +44,8 @@ class Config(object):
     # --------------------
     # Model hyperparameters
     # Backbone & num_features used for feature extraction
-    BACKBONE = {'resnet50': 2048}
+    N_FEATURES = 2048
+    BACKBONE = {'resnet50': N_FEATURES}
 
     # Unit size for LSTM, Dense
     UNITS = 512
