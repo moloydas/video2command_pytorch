@@ -203,6 +203,7 @@ class Video2Command():
             S_mask = S != 0
             tgt_mask = S_mask.unsqueeze(1).unsqueeze(3)
             nopeak_mask = (1 - torch.triu(torch.ones(self.config.N_HEAD, self.config.MAXLEN, self.config.MAXLEN), diagonal=1)).bool()
+            nopeak_mask = nopeak_mask.to(self.device)
             tgt_mask = tgt_mask & nopeak_mask
             tgt_mask = tgt_mask.view(-1, self.config.MAXLEN, self.config.MAXLEN)
             tgt_mask = tgt_mask.to(self.device)
