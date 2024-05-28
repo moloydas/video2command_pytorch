@@ -17,6 +17,7 @@ class Vocabulary(object):
     """Simple vocabulary wrapper.
     """
     def __init__(self, 
+                 pad_word='<pad>',
                  start_word='<sos>',
                  end_word='<eos>',
                  unk_word=None):
@@ -27,10 +28,11 @@ class Vocabulary(object):
         self.word_counts = {}
 
         # Add special tokens
+        self.pad_word = pad_word
         self.start_word = start_word
         self.end_word = end_word
         self.unk_word = unk_word
-        for special_token in [start_word, end_word, unk_word]:
+        for special_token in [pad_word, start_word, end_word, unk_word]:
             if special_token is not None:
                 self.add_word(special_token)
 
