@@ -315,8 +315,9 @@ class Video2Command():
         """
         # Save the current checkpoint
         torch.save({
-                    'VideoEncoder_state_dict': self.video_encoder.state_dict(),
-                    'CommandDecoder_state_dict': self.command_decoder.state_dict(),
+                    # 'VideoEncoder_state_dict': self.video_encoder.state_dict(),
+                    # 'CommandDecoder_state_dict': self.command_decoder.state_dict(),
+                    'transformerV2C_state_dict': self.transformerV2C.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     }, os.path.join(self.config.CHECKPOINT_PATH, 'saved', 'v2c_epoch_{}.pth'.format(epoch)))
         print('Model saved.')
@@ -327,7 +328,8 @@ class Video2Command():
         """
         print('Loading...')
         checkpoint = torch.load(save_path)
-        self.video_encoder.load_state_dict(checkpoint['VideoEncoder_state_dict'])
-        self.command_decoder.load_state_dict(checkpoint['CommandDecoder_state_dict'])
+        # self.video_encoder.load_state_dict(checkpoint['VideoEncoder_state_dict'])
+        # self.command_decoder.load_state_dict(checkpoint['CommandDecoder_state_dict'])
+        self.transformerV2C.load_state_dict(checkpoint['transformerV2C_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         print('Model loaded.')
