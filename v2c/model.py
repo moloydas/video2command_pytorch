@@ -264,6 +264,8 @@ class Video2Command():
         assert self.config.MODE == 'test'
         y_pred, y_true = [], []
         losses = 0.0
+        self.transformerV2C.eval()
+
         # Evaluation over the entire test dataset
         for i, (Xv, S_true, clip_names) in enumerate(test_loader):
             # Mini-batch
@@ -298,8 +300,9 @@ class Video2Command():
                 vocab):
         """Run the prediction pipeline given one sample.
         """
-        self.video_encoder.eval()
-        self.command_decoder.eval()
+        # self.video_encoder.eval()
+        # self.command_decoder.eval()
+        self.transformerV2C.eval()
 
         with torch.no_grad():
             # Initialize S with '<sos>'
