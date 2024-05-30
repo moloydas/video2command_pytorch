@@ -30,7 +30,7 @@ class Config(object):
     BATCH_SIZE = 16
 
     # Epochs
-    NUM_EPOCHS = 150
+    NUM_EPOCHS = 20
 
     # Saved model path
     CHECKPOINT_PATH = os.path.join('checkpoints')
