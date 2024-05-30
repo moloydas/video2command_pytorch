@@ -263,16 +263,35 @@ class Video2Command():
         """
         assert self.config.MODE == 'test'
         y_pred, y_true = [], []
+        losses = 0.0
         # Evaluation over the entire test dataset
         for i, (Xv, S_true, clip_names) in enumerate(test_loader):
             # Mini-batch
             Xv, S_true = Xv.to(self.device), S_true.to(self.device)
             S_pred = self.predict(Xv, vocab)
+
+            tgt_input = S_true[:-1, :]
+            tgt_output = S_true[1:, :]
+
+            # Get target_mask for Transformer
+            tgt_mask, tgt_padding_mask = create_mask(tgt_input)
+
+            # Get captions with Transformer
+            logits = self.transformerV2C(Xv, tgt_input, 
+                                         tgt_mask=tgt_mask, 
+                                         tgt_mask_padding=tgt_padding_mask)
+            loss = self.loss_objective(logits.reshape(-1, logits.shape[-1]), 
+                                       tgt_output.reshape(-1))
+
             y_pred.append(S_pred)
             y_true.append(S_true)
+
+            # Calculate loss
+            losses += loss
+
         y_pred = torch.cat(y_pred, dim=0)
         y_true = torch.cat(y_true, dim=0)
-        return y_pred.cpu().numpy(), y_true.cpu().numpy()
+        return y_pred.cpu().numpy(), y_true.cpu().numpy(), losses / len(list(test_loader))
 
     def predict(self, 
                 Xv,
