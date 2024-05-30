@@ -36,7 +36,7 @@ class Config(object):
     CHECKPOINT_PATH = os.path.join('checkpoints')
 
     # Display every # steps
-    DISPLAY_EVERY = 20
+    DISPLAY_EVERY = 100
 
     # Save model every ? epoch
     SAVE_EVERY = 5
