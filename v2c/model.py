@@ -326,7 +326,7 @@ class Video2Command():
             enc_out = self.transformerV2C.encoder(Xv)
             ys = torch.ones(1, 1).fill_(vocab('<sos>')).type(torch.long).to(self.device)
             for timestep in range(self.config.MAXLEN - 1):
-                tgt_mask = (generate_square_subsequent_mask(ys.size(0))
+                tgt_mask = (generate_square_subsequent_mask(ys.size(0), self.device)
                                 .type(torch.bool)).to(self.device)
                 output = self.transformerV2C.decoder(ys, enc_out, tgt_mask)
                 output = output.transpose(0, 1)
