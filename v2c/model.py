@@ -120,11 +120,14 @@ class TransformerDecoder(nn.Module):
                                                                             dim_feedforward, 
                                                                             dropout), config.N_DECODING_LAYER)
 
-    def forward(self, target, enc_out, target_mask, target_mask_padding):
+    def forward(self, target, enc_out, target_mask, target_mask_padding=None):
         # Decode features and generate captions using Transformer
         x = self.embedding(target)
         x = self.position_embedding(x)
-        output = self.decoder(x, enc_out, tgt_mask=target_mask, tgt_key_padding_mask=target_mask_padding)
+        if target_mask_padding is not None:
+            output = self.decoder(x, enc_out, tgt_mask=target_mask, tgt_key_padding_mask=target_mask_padding)
+        else:
+            output = self.decoder(x, enc_out, tgt_mask=target_mask)
         return output
 
 class TransformerV2C(nn.Module):
@@ -254,11 +257,11 @@ class Video2Command():
             print('Total loss for epoch {}: {:.6f}'.format(epoch+1, total_loss / (i + 1)))
             if (epoch + 1) % self.config.SAVE_EVERY == 0:
                 self.save_weights(epoch + 1)
+                self.evaluate(train_loader)
         return
 
     def evaluate(self,
-                 test_loader,
-                 vocab):
+                 test_loader, vocab):
         """Run the evaluation pipeline over the test dataset.
         """
         assert self.config.MODE == 'test'
@@ -295,13 +298,20 @@ class Video2Command():
         y_true = torch.cat(y_true, dim=0)
         return y_pred.cpu().numpy(), y_true.cpu().numpy(), losses / len(list(test_loader))
 
+    # def translate(model: torch.nn.Module, src_sentence: str):
+    #     model.eval()
+    #     src = text_transform[SRC_LANGUAGE](src_sentence).view(-1, 1)
+    #     num_tokens = src.shape[0]
+    #     src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
+    #     tgt_tokens = greedy_decode(
+    #         model,  src, src_mask, max_len=num_tokens + 5, start_symbol=BOS_IDX).flatten()
+    #     return " ".join(vocab_transform[TGT_LANGUAGE].lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
+
     def predict(self, 
                 Xv,
                 vocab):
         """Run the prediction pipeline given one sample.
         """
-        # self.video_encoder.eval()
-        # self.command_decoder.eval()
         self.transformerV2C.eval()
 
         with torch.no_grad():
@@ -310,17 +320,22 @@ class Video2Command():
             S[:,0] = vocab('<sos>')
             S = S.to(self.device)
 
-            # Start v2c prediction pipeline
-            Xv, states = self.video_encoder(Xv)
-
-            #states = self.command_decoder.reset_states(Xv.shape[0])
-            #_, states = self.command_decoder(None, states, Xv=Xv)   # Encode video features 1st
+            # Encode video features 1st
+            enc_out = self.transformerV2C.encoder(Xv)
+            ys = torch.ones(1, 1).fill_(vocab('<sos>')).type(torch.long).to(self.device)
             for timestep in range(self.config.MAXLEN - 1):
-                Xs = S[:,timestep]
-                probs, states = self.command_decoder(Xs, states)
-                preds = torch.argmax(probs, dim=1)    # Collect prediction
-                S[:,timestep+1] = preds
-        return S
+                tgt_mask = (generate_square_subsequent_mask(ys.size(0))
+                                .type(torch.bool)).to(self.device)
+                output = self.transformerV2C.decoder(ys, enc_out, tgt_mask)
+                output = output.transpose(0, 1)
+                prob = self.transformerV2C.linear(output[:, -1])
+                _, next_word = torch.max(prob, dim=1)
+                next_word = next_word.item()
+                ys = torch.cat([ys,
+                        torch.ones(1, 1).type_as(Xv.data).fill_(next_word)], dim=0)
+                if next_word == vocab('<eos>'):
+                    break
+            return ys
 
     def save_weights(self, 
                      epoch):
@@ -335,11 +350,11 @@ class Video2Command():
         print('Model saved.')
 
     def load_weights(self,
-                     save_path):
+                     save_path, device='cpu'):
         """Load pre-trained weights by path.
         """
         print('Loading...')
-        checkpoint = torch.load(save_path)
+        checkpoint = torch.load(save_path,  map_location=torch.device(device))
         self.transformerV2C.load_state_dict(checkpoint['transformerV2C_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         print('Model loaded.')
