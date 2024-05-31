@@ -42,7 +42,7 @@ test_loader = data.DataLoader(test_dataset,
 config.display()
 
 # Setup and build video2command training inference
-v2c_model = Video2Command(config)
+v2c_model = Video2Command(config, vocab)
 v2c_model.build()
 
 # Safely create prediction dir if non-exist

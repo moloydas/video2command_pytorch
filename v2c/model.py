@@ -127,6 +127,7 @@ class TransformerDecoder(nn.Module):
         if target_mask_padding is not None:
             output = self.decoder(x, enc_out, tgt_mask=target_mask, tgt_key_padding_mask=target_mask_padding)
         else:
+            # print(x.shape, enc_out.shape, target_mask.shape)
             output = self.decoder(x, enc_out, tgt_mask=target_mask)
         return output
 
@@ -275,8 +276,12 @@ class Video2Command():
         for i, (Xv, S_true, clip_names) in enumerate(test_loader):
             # Mini-batch
             Xv, S_true = Xv.to(self.device), S_true.to(self.device)
-            S_pred = self.predict(Xv, vocab)
+            Xv = Xv.permute(1, 0, 2)
+            S_true = S_true.permute(1, 0)
 
+            S_pred = self.predict(Xv, vocab)
+            print(S_true[:,0])
+            print("prediction completed")
             tgt_input = S_true[:-1, :]
             tgt_output = S_true[1:, :]
 
@@ -318,25 +323,34 @@ class Video2Command():
 
         with torch.no_grad():
             # Initialize S with '<sos>'
-            S = torch.zeros((Xv.shape[0], self.config.MAXLEN), dtype=torch.long)
-            S[:,0] = vocab('<sos>')
-            S = S.to(self.device)
+            # S = torch.zeros((Xv.shape[0], self.config.MAXLEN), dtype=torch.long)
+            # S[:,0] = vocab('<sos>')
+            # S = S.to(self.device)
 
             # Encode video features 1st
             enc_out = self.transformerV2C.encoder(Xv)
-            ys = torch.ones(1, 1).fill_(vocab('<sos>')).type(torch.long).to(self.device)
+            ys = torch.ones(1, Xv.shape[1]).fill_(vocab('<sos>')).type(torch.long).to(self.device)
             for timestep in range(self.config.MAXLEN - 1):
+                # print(timestep)
                 tgt_mask = (generate_square_subsequent_mask(ys.size(0), self.device)
                                 .type(torch.bool)).to(self.device)
+                # print(ys.shape, enc_out.shape, tgt_mask.shape)
                 output = self.transformerV2C.decoder(ys, enc_out, tgt_mask)
                 output = output.transpose(0, 1)
+                # print('out', output.shape)
                 prob = self.transformerV2C.linear(output[:, -1])
+                # print("prob: ", prob.shape)
                 _, next_word = torch.max(prob, dim=1)
-                next_word = next_word.item()
-                ys = torch.cat([ys,
-                        torch.ones(1, 1).type_as(Xv.data).fill_(next_word)], dim=0)
-                if next_word == vocab('<eos>'):
-                    break
+                # print(_.shape)
+                # print(next_word.shape)
+                # next_word = next_word.item()
+                # print(next_word)
+                # ys = torch.cat([ys,
+                #         torch.ones(1, Xv.shape[1]).type_as(Xv.data).fill_(next_word)], dim=0)
+                ys = torch.cat([ys, next_word.unsqueeze(0)], dim=0)
+                # if next_word == vocab('<eos>'):
+                #     break
+            print(ys[:,0])
             return ys
 
     def save_weights(self, 
