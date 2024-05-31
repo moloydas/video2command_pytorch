@@ -179,10 +179,12 @@ class Video2Command():
     """Train/Eval inference class for V2C model.
     """
     def __init__(self,
-                 config):
+                 config,
+                 vocab=None):
         self.config = config
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    
+        self.vocab = vocab
+
     def build(self,
               bias_vector=None):
         # Initialize Encode & Decode models here
@@ -257,7 +259,7 @@ class Video2Command():
             print('Total loss for epoch {}: {:.6f}'.format(epoch+1, total_loss / (i + 1)))
             if (epoch + 1) % self.config.SAVE_EVERY == 0:
                 self.save_weights(epoch + 1)
-                self.evaluate(train_loader)
+                self.evaluate(train_loader, self.vocab)
         return
 
     def evaluate(self,
