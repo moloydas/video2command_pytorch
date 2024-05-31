@@ -295,6 +295,13 @@ class Video2Command():
             loss = self.loss_objective(logits.reshape(-1, logits.shape[-1]), 
                                        tgt_output.reshape(-1))
 
+            if S_pred.shape[1] != self.config.BATCH_SIZE:
+                pad = torch.zeros(S_pred.shape[0], 
+                                    self.config.BATCH_SIZE-S_pred.shape[1],
+                                    device=S_pred.device)
+                S_pred = torch.cat([S_pred, pad], dim=1)
+                S_true = torch.cat([S_true, pad], dim=1)
+
             y_pred.append(S_pred)
             y_true.append(S_true)
 
@@ -303,6 +310,7 @@ class Video2Command():
 
         y_pred = torch.cat(y_pred, dim=0)
         y_true = torch.cat(y_true, dim=0)
+        print("Evaluation loss: ", losses.item() / len(list(test_loader)))
         return y_pred.cpu().numpy(), y_true.cpu().numpy(), losses / len(list(test_loader))
 
     # def translate(model: torch.nn.Module, src_sentence: str):
