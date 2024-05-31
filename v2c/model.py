@@ -267,7 +267,7 @@ class Video2Command():
                  test_loader, vocab):
         """Run the evaluation pipeline over the test dataset.
         """
-        assert self.config.MODE == 'test'
+        # assert self.config.MODE == 'test'
         y_pred, y_true = [], []
         losses = 0.0
         self.transformerV2C.eval()
