@@ -260,7 +260,7 @@ class Video2Command():
             print('Total loss for epoch {}: {:.6f}'.format(epoch+1, total_loss / (i + 1)))
             if (epoch + 1) % self.config.SAVE_EVERY == 0:
                 self.save_weights(epoch + 1)
-                self.evaluate(train_loader, self.vocab)
+                # self.evaluate(train_loader, self.vocab)
         return
 
     def evaluate(self,
