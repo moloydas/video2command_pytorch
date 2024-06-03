@@ -277,23 +277,23 @@ class Video2Command():
             # Mini-batch
             Xv, S_true = Xv.to(self.device), S_true.to(self.device)
             Xv = Xv.permute(1, 0, 2)
-            S_true = S_true.permute(1, 0)
+            S_true = S_true.permute(1, 0).cpu()
 
-            S_pred = self.predict(Xv, vocab)
-            print(S_true[:,0])
-            print("prediction completed")
-            tgt_input = S_true[:-1, :]
-            tgt_output = S_true[1:, :]
+            S_pred = self.predict(Xv, vocab).cpu()
+            # print(S_true[:,0])
+            # print("prediction completed")
+            # tgt_input = S_true[:-1, :]
+            # tgt_output = S_true[1:, :]
 
-            # Get target_mask for Transformer
-            tgt_mask, tgt_padding_mask = create_mask(tgt_input)
+            # # Get target_mask for Transformer
+            # tgt_mask, tgt_padding_mask = create_mask(tgt_input)
 
-            # Get captions with Transformer
-            logits = self.transformerV2C(Xv, tgt_input, 
-                                         tgt_mask=tgt_mask, 
-                                         tgt_mask_padding=tgt_padding_mask)
-            loss = self.loss_objective(logits.reshape(-1, logits.shape[-1]), 
-                                       tgt_output.reshape(-1))
+            # # Get captions with Transformer
+            # logits = self.transformerV2C(Xv, tgt_input, 
+            #                              tgt_mask=tgt_mask, 
+            #                              tgt_mask_padding=tgt_padding_mask)
+            # loss = self.loss_objective(logits.reshape(-1, logits.shape[-1]), 
+            #                            tgt_output.reshape(-1))
 
             if S_pred.shape[1] != self.config.BATCH_SIZE:
                 pad = torch.zeros(S_pred.shape[0], 
@@ -306,11 +306,11 @@ class Video2Command():
             y_true.append(S_true)
 
             # Calculate loss
-            losses += loss
+            # losses += loss
 
         y_pred = torch.cat(y_pred, dim=0)
         y_true = torch.cat(y_true, dim=0)
-        print("Evaluation loss: ", losses.item() / len(list(test_loader)))
+        print("Evaluation loss: ", losses / len(list(test_loader)))
         return y_pred.cpu().numpy(), y_true.cpu().numpy(), losses / len(list(test_loader))
 
     # def translate(model: torch.nn.Module, src_sentence: str):
@@ -358,7 +358,7 @@ class Video2Command():
                 ys = torch.cat([ys, next_word.unsqueeze(0)], dim=0)
                 # if next_word == vocab('<eos>'):
                 #     break
-            print(ys[:,0])
+            # print(ys[:,0])
             return ys
 
     def save_weights(self, 
