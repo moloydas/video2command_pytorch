@@ -18,8 +18,8 @@ class Config(object):
 
     # Model configuration
     N_HEAD = 8
-    N_ENCODING_LAYER = 1
-    N_DECODING_LAYER = 1
+    N_ENCODING_LAYER = 3
+    N_DECODING_LAYER = 3
     
     # --------------------
     # Training Parameters
@@ -27,10 +27,10 @@ class Config(object):
     LEARNING_RATE = 1e-4
 
     # Batch size
-    BATCH_SIZE = 16
+    BATCH_SIZE = 128
 
     # Epochs
-    NUM_EPOCHS = 20
+    NUM_EPOCHS = 200
 
     # Saved model path
     CHECKPOINT_PATH = os.path.join('checkpoints')
