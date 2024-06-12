@@ -260,7 +260,7 @@ class Video2Command():
             print('Total loss for epoch {}: {:.6f}'.format(epoch+1, total_loss / (i + 1)))
             if (epoch + 1) % self.config.SAVE_EVERY == 0:
                 self.save_weights(epoch + 1)
-                # self.evaluate(train_loader, self.vocab)
+                self.evaluate(train_loader, self.vocab)
         return
 
     def evaluate(self,
@@ -277,23 +277,23 @@ class Video2Command():
             # Mini-batch
             Xv, S_true = Xv.to(self.device), S_true.to(self.device)
             Xv = Xv.permute(1, 0, 2)
-            S_true = S_true.permute(1, 0).cpu()
+            S_true = S_true.permute(1, 0)
 
-            S_pred = self.predict(Xv, vocab).cpu()
+            S_pred = self.predict(Xv, vocab)
             # print(S_true[:,0])
             # print("prediction completed")
-            # tgt_input = S_true[:-1, :]
-            # tgt_output = S_true[1:, :]
+            tgt_input = S_true[:-1, :]
+            tgt_output = S_true[1:, :]
 
-            # # Get target_mask for Transformer
-            # tgt_mask, tgt_padding_mask = create_mask(tgt_input)
+            # Get target_mask for Transformer
+            tgt_mask, tgt_padding_mask = create_mask(tgt_input)
 
-            # # Get captions with Transformer
-            # logits = self.transformerV2C(Xv, tgt_input, 
-            #                              tgt_mask=tgt_mask, 
-            #                              tgt_mask_padding=tgt_padding_mask)
-            # loss = self.loss_objective(logits.reshape(-1, logits.shape[-1]), 
-            #                            tgt_output.reshape(-1))
+            # Get captions with Transformer
+            logits = self.transformerV2C(Xv, tgt_input, 
+                                         tgt_mask=tgt_mask, 
+                                         tgt_mask_padding=tgt_padding_mask)
+            loss = self.loss_objective(logits.reshape(-1, logits.shape[-1]), 
+                                       tgt_output.reshape(-1))
 
             if S_pred.shape[1] != self.config.BATCH_SIZE:
                 pad = torch.zeros(S_pred.shape[0], 
@@ -306,7 +306,7 @@ class Video2Command():
             y_true.append(S_true)
 
             # Calculate loss
-            # losses += loss
+            losses += loss.item()
 
         y_pred = torch.cat(y_pred, dim=0)
         y_true = torch.cat(y_true, dim=0)
