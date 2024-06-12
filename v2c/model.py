@@ -261,6 +261,7 @@ class Video2Command():
             if (epoch + 1) % self.config.SAVE_EVERY == 0:
                 self.save_weights(epoch + 1)
                 self.evaluate(train_loader, self.vocab)
+                self.transformerV2C.train()
         return
 
     def evaluate(self,
